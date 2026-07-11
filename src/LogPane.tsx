@@ -13,6 +13,8 @@ type HistoryStatus = "idle" | "loading" | "loaded" | "error";
 
 // Cap the buffer so a long-lived tail doesn't grow the DOM unbounded.
 const MAX_LINES = 2000;
+const INITIAL_RECONNECT_DELAY_MS = 1000;
+const MAX_RECONNECT_DELAY_MS = 30_000;
 
 const dot: Record<Status, string> = {
   connecting: "bg-amber-500",
@@ -52,23 +54,53 @@ export default function LogPane({
   // Guards against a stale history response overwriting a newer one.
   const reqId = useRef(0);
 
-  // Live WebSocket tail — unchanged, and kept streaming even while the operator
-  // is reviewing an older boot.
+  // Keep the tail connected while the operator reviews an older boot. Some
+  // proxies close quiet WebSockets, so a close means reconnecting rather than a
+  // terminal log failure. Incoming log lines are not used as a health check:
+  // Minecraft can legitimately be quiet for a long time.
   useEffect(() => {
     setLines([]);
     setStatus("connecting");
-    const ws = new WebSocket(wsUrl(`/api/mc/servers/${server}/logs`));
-    ws.onopen = () => setStatus("open");
-    ws.onclose = () => setStatus("closed");
-    ws.onerror = () => setStatus("closed");
-    ws.onmessage = (ev) => {
-      const text = String(ev.data);
-      setLines((prev) => {
-        const next = prev.concat(text);
-        return next.length > MAX_LINES ? next.slice(-MAX_LINES) : next;
-      });
+    let stopped = false;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    let reconnectDelay = INITIAL_RECONNECT_DELAY_MS;
+    let ws: WebSocket | undefined;
+
+    function connect() {
+      ws = new WebSocket(wsUrl(`/api/mc/servers/${server}/logs`));
+      ws.onopen = () => {
+        if (!stopped) {
+          reconnectDelay = INITIAL_RECONNECT_DELAY_MS;
+          setStatus("open");
+        }
+      };
+      ws.onclose = () => {
+        if (stopped) return;
+        setStatus("connecting");
+        retry = setTimeout(connect, reconnectDelay);
+        reconnectDelay = Math.min(
+          reconnectDelay * 2,
+          MAX_RECONNECT_DELAY_MS,
+        );
+      };
+      // Closing is handled by onclose, which starts the next connection.
+      ws.onerror = () => {};
+      ws.onmessage = (ev) => {
+        if (stopped) return;
+        const text = String(ev.data);
+        setLines((prev) => {
+          const next = prev.concat(text);
+          return next.length > MAX_LINES ? next.slice(-MAX_LINES) : next;
+        });
+      };
     };
-    return () => ws.close();
+
+    connect();
+    return () => {
+      stopped = true;
+      if (retry) clearTimeout(retry);
+      ws?.close();
+    };
   }, [server]);
 
   const loadHistory = useCallback(async () => {
