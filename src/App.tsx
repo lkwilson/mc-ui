@@ -49,9 +49,11 @@ export default function App() {
     <div className="mx-auto flex min-h-full max-w-6xl flex-col px-4 pb-10 sm:px-6">
       <header className="sticky top-0 z-10 -mx-4 mb-2 flex items-center justify-between border-b border-slate-200/60 bg-slate-50/80 px-4 py-4 backdrop-blur-md sm:-mx-6 sm:px-6 dark:border-slate-800/60 dark:bg-slate-950/80">
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-green-600 text-lg font-black text-white shadow-sm">
-            ⛏
-          </div>
+          <img
+            src="/favicon.svg"
+            alt=""
+            className="h-9 w-9 rounded-xl shadow-sm ring-1 ring-black/5 dark:ring-white/10"
+          />
           <div className="leading-tight">
             <h1 className="bg-gradient-to-r from-emerald-500 to-green-600 bg-clip-text text-xl font-extrabold tracking-tight text-transparent">
               Minecraft

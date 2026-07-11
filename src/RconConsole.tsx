@@ -1,11 +1,12 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { wsUrl } from "./api";
 
-type Status = "connecting" | "open" | "closed";
+type Status = "idle" | "connecting" | "open" | "closed";
 type Entry = { kind: "cmd" | "resp"; text: string };
 
 const dot: Record<Status, string> = {
+  idle: "bg-slate-400",
   connecting: "bg-amber-500",
   open: "bg-emerald-500",
   closed: "bg-rose-500",
@@ -20,28 +21,43 @@ export default function RconConsole({
 }) {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [input, setInput] = useState("");
-  const [status, setStatus] = useState<Status>("connecting");
+  const [status, setStatus] = useState<Status>("idle");
   const wsRef = useRef<WebSocket | null>(null);
   const boxRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
+  const disconnect = useCallback(() => {
+    wsRef.current?.close();
+    wsRef.current = null;
+  }, []);
+
+  const connect = useCallback(() => {
+    // Guard against a double-open if the button is mashed.
+    if (wsRef.current) return;
     setEntries([]);
-    setInput("");
     setStatus("connecting");
     const ws = new WebSocket(wsUrl(`/api/mc/servers/${server}/rcon`));
     wsRef.current = ws;
     ws.onopen = () => setStatus("open");
-    ws.onclose = () => setStatus("closed");
+    ws.onclose = () => {
+      if (wsRef.current === ws) wsRef.current = null;
+      setStatus("closed");
+    };
     ws.onerror = () => setStatus("closed");
     ws.onmessage = (ev) =>
       setEntries((prev) =>
         prev.concat({ kind: "resp", text: String(ev.data) }),
       );
-    return () => {
-      ws.close();
-      wsRef.current = null;
-    };
   }, [server]);
+
+  // Switching servers tears down any live session and returns to idle — the
+  // user must explicitly reconnect. Also cleans up on unmount.
+  useEffect(() => {
+    disconnect();
+    setEntries([]);
+    setInput("");
+    setStatus("idle");
+    return disconnect;
+  }, [server, disconnect]);
 
   useLayoutEffect(() => {
     const el = boxRef.current;
@@ -59,6 +75,7 @@ export default function RconConsole({
   }
 
   const ready = status === "open";
+  const connected = status === "connecting" || status === "open";
 
   return (
     <div className="flex min-h-64 flex-col overflow-hidden rounded-2xl border border-slate-200/70 bg-white/70 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/50">
@@ -68,7 +85,21 @@ export default function RconConsole({
           <h3 className="text-sm font-semibold">RCON</h3>
           <span className="text-xs text-slate-400">{server}</span>
         </div>
-        <span className="text-xs text-slate-400">{status}</span>
+        {connected ? (
+          <button
+            onClick={disconnect}
+            className="rounded-lg border border-slate-300/70 px-2.5 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-slate-700/70 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            Disconnect
+          </button>
+        ) : (
+          <button
+            onClick={connect}
+            className="rounded-lg bg-gradient-to-br from-emerald-500 to-green-600 px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition hover:brightness-110"
+          >
+            {status === "closed" ? "Reconnect" : "Connect"}
+          </button>
+        )}
       </div>
 
       <div
@@ -77,9 +108,15 @@ export default function RconConsole({
       >
         {entries.length === 0 ? (
           <p className="text-slate-500">
-            {online
-              ? "type a command below (e.g. list, say hi, time set day)"
-              : "server is not running — RCON unavailable"}
+            {status === "idle"
+              ? online
+                ? 'not connected — press "Connect" to open an RCON session'
+                : 'server is not running — "Connect" will likely fail'
+              : status === "connecting"
+                ? "connecting…"
+                : status === "closed"
+                  ? "disconnected"
+                  : "type a command below (e.g. list, say hi, time set day)"}
           </p>
         ) : (
           entries.map((e, i) =>
@@ -111,7 +148,7 @@ export default function RconConsole({
           disabled={!ready}
           spellCheck={false}
           autoComplete="off"
-          placeholder={ready ? "command" : "connecting…"}
+          placeholder={ready ? "command" : "not connected"}
           className="min-w-0 flex-1 bg-transparent font-mono text-sm outline-none placeholder:text-slate-400 disabled:opacity-50"
         />
         <button
