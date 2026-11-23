@@ -1,32 +1,38 @@
 name: PR checks
-
 on:
   pull_request:
     branches: [main]
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
 jobs:
   checks:
     runs-on: brew7
-    steps:
-      - uses: actions/checkout@v7
-      - name: Run checks
-        run: bash ./scripts/check.sh
+    env:
+      IMAGE_DOCKER_ENDPOINT: tcp://localhost:2375
 
-  build-dev:
-    runs-on: brew7
-    needs: checks
     steps:
       - uses: actions/checkout@v7
-      - name: Set up Docker Buildx
+      - name: Read pinned tool versions
+        id: config
         run: |
-          docker context create builders --docker "host=tcp://localhost:2375"
-          docker buildx create --name mybuilder --use builders
-      - name: Build and push dev-latest (amd64)
-        run: |
-          REG='zot.endsy.me'
-          IMG="$REG/library/${GITHUB_REPOSITORY##*/}:dev-latest"
-          docker buildx build --platform linux/amd64 -t "$IMG" --push .
+          source scripts/env.sh
+          echo "node=$NODE_VERSION" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ steps.config.outputs.node }}
+      - name: Restore dependency downloads
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.npm
+            ~/.cache/uv
+            ~/.local/share/uv/python
+            ~/.cache/app-ci
+          key: deps-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/env.sh', '**/Cargo.lock', '**/package-lock.json', '**/uv.lock') }}
+      - name: Prepare pinned tools and caches
+        run: bash scripts/setup.sh
+      - name: Format, lint, tests and development build
+        run: bash scripts/check.sh

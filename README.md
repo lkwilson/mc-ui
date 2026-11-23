@@ -68,15 +68,18 @@ npm run dev            # proxies /api -> http://localhost:8080 (override RED_TAR
 
 ## Checks
 
-```
-npm ci && npm run build     # tsc -b + vite build (scripts/check.sh)
-npm run ff                  # prettier --write (tailwind class sorting)
-```
+Run `bash scripts/all.sh` for the complete local gate: locked dependency setup,
+format checking, ESLint and TypeScript checks, Node test discovery, and a full
+Vite development build. Use Node 26.0.0 to match CI. `npm run ff` applies formatting.
+There are currently no automated tests; the real Node runner reports zero tests.
+`npm run build` creates the production bundle.
 
 ## CI / release
 
-Standard home-infra frontend pipeline (see `home-infra/templates`, and the live
-`hub-ui` as the reference): `.gitea/workflows` build on `brew7`, no sccache. A
-merged PR **must carry a `patch`/`minor`/`major` label** or `release.yml` cuts no
-tag and no image is built. Images publish to `harbor.endsy.me/library/mc-ui`;
-the GitHub Renovate then bumps the tag in `mc-ui.yaml`.
+The managed files match `home-infra/templates/ui`; repository settings live in
+`scripts/env.sh`. Pull requests run the full gate on brew7 without Docker.
+There is no main build. A merged PR labelled `patch`, `minor`, or `major` tags
+its exact merge commit; tag publication builds the production amd64 image at
+`zot.endsy.me/library/mc-ui:<version>`. No moving image tags are published.
+Renovate and Flux update deployment pins separately. The existing nginx port 80,
+`/health`, and HTTP/WebSocket proxy to red are preserved.

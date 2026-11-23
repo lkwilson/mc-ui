@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
-# Repo-specific checks (React / TS). tsc type check + vite build (see the
-# "build" script in package.json).
+# One workspace preserves dependencies and compilation artifacts between stages.
 set -euo pipefail
-
-npm ci
-npm run build
+cd "$(dirname "$0")/.."
+source scripts/env.sh
+bash scripts/format.sh
+bash scripts/lint.sh
+bash scripts/test.sh
+export GATE_TESTS_PASSED=true
+bash scripts/build.sh

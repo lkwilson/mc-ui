@@ -9,11 +9,15 @@ import tailwindcss from "@tailwindcss/vite";
 const target = process.env.RED_TARGET ?? "http://localhost:8080";
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
+  build: {
+    minify: mode !== "development",
+    sourcemap: mode === "development",
+  },
   server: {
     proxy: {
       "/api": { target, changeOrigin: true, ws: true },
     },
   },
   plugins: [react(), tailwindcss()],
-});
+}));

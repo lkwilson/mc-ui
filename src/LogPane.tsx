@@ -78,10 +78,7 @@ export default function LogPane({
         if (stopped) return;
         setStatus("connecting");
         retry = setTimeout(connect, reconnectDelay);
-        reconnectDelay = Math.min(
-          reconnectDelay * 2,
-          MAX_RECONNECT_DELAY_MS,
-        );
+        reconnectDelay = Math.min(reconnectDelay * 2, MAX_RECONNECT_DELAY_MS);
       };
       // Closing is handled by onclose, which starts the next connection.
       ws.onerror = () => {};
@@ -93,7 +90,7 @@ export default function LogPane({
           return next.length > MAX_LINES ? next.slice(-MAX_LINES) : next;
         });
       };
-    };
+    }
 
     connect();
     return () => {
